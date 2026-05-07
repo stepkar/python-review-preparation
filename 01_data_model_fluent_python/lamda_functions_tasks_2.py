@@ -22,7 +22,7 @@ logss = [
 #    - Если уровень INFO → вывести "[i] {message}"
 #    - Если другой уровень → "[?] Unknown level: {level}"
 '''
-def logs():
+def task1():
   error_level1= list(filter(lambda s: s.count('ERROR')>0, logss))
   error_level2=[s for s in logss if s.count('ERROR')>0]
   error_level3=[s for s in logss if s.find('ERROR')!=-1]
@@ -54,8 +54,8 @@ students = [
   {"name": "Frank", "grades": [30, 40, 35, 25], "status": "inactive"},
 ]
 # ========== Задача 6 (студенты и успеваемость) ==========
-# 1. filter: Оставить только активных студентов (status == "active")
-# 2. map: Для каждого активного студента вычислить средний балл (sum(grades)/len(grades))
+# 1. filter: Оставить только активных студентов
+# 2. map: Для каждого активного студента вычислить средний балл
 # 3. reduce: Найти общий средний балл среди всех активных студентов
 # 4. sorted: Отсортировать всех студентов (активных и неактивных) по имени (по алфавиту)
 # 5. match/case: Для каждого студента вывести информацию:
@@ -66,10 +66,28 @@ students = [
 #    (Подсказка: вы можете вычислить средний балл прямо в case, используя гвард и sum(grades)/len(grades))
 
 def task2():
-  act_students = list(filter(lambda student: student['status']== 'active', students))
-  print(act_students)
-
+  active_students = list(filter(lambda student: student['status']== 'active', students))
+  print(active_students)
+  grade_mean_map = list(map(lambda x: sum(x['grades'])/len(x['grades']), active_students))
+  grade_mean_compreh = [f'{student['name']}:{sum(student['grades'])/len(student['grades'])}' for student in active_students]
+  grade_mean_reduce = [f'{student['name']}_{reduce(lambda acc, x: acc + x, student['grades'], 0)/len(student['grades'])}' for student in active_students]
+  print(grade_mean_map)
+  print(grade_mean_compreh)
+  print(grade_mean_reduce)
+  sorted_by_name = [s['name'] for s in sorted(students, key=lambda student: student['name'], reverse=False)]
+  print(sorted_by_name)
+  for student in students:
+    mean_grades=sum(student['grades'])/len(student['grades'])
+    match student:
+      case{'name':name, 'status':status} if status != 'active':
+        print(f'❌ {name} is inactive')
+      case{'name':name} if mean_grades >=85:
+        print(f'🏆 {name}: {mean_grades:.1f} (best of the best)')
+      case{'name':name} if mean_grades >=65 and mean_grades<85:
+        print(f'✅ {name} : {mean_grades:.1f} (good student)')
+      case{'name':name} if mean_grades <65:
+        print(f'⚠️ {name} need support')
 
 if __name__ == '__main__':
-    # logs()
+    # task1()
     task2()

@@ -47,15 +47,10 @@ def main():
     {"order_id": 101, "items": [{"name": "laptop", "price": 1000}, {"name": "mouse", "price": 20}]},
     {"order_id": 102, "items": [{"name": "keyboard", "price": 80}, {"name": "monitor", "price": 300}]},
   ]
-
   #создать список всех названий из всех заказов
   name_set = {i['name'] for o in orders for i in o['items']}
-  name_set2 = [i['name'] for o in orders for i in cast(List[Dict[str, Any]], o.get('items', []))]
-  for n in name_set:
-    print(n)
 
   print(name_set)
-  print(name_set2)
 
   transactions = [
     {"user": "Alice", "amount": 100, "currency": "USD"},
