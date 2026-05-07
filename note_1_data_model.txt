@@ -1,0 +1,250 @@
+Typles are immutable lists.
+Кортежи с изменяемыми элементами - могут быть причиной множества багов. 
+Кортежи с неизменяемыми элементами - можно взять хеш.
+Кортежи с изменяемыми элементами дадут TypeError при взятии хеша.
+
+Плюсы кортежей перед листом:
+1. Tuples can be Constant folded 
+2. Tuples can be reused instead of copied (экономит память)
+3. Tuples are compact and don't over allocate
+4. Tuples directly references to their elements
+
+Tuples can be constant folded
+
+Tuples of constants can be precomputed by Python's peephole optimizer or AST-optimizer. Lists, on the other hand, get built-up from scratch:
+
+Copy
+    >>> from dis import dis
+
+    >>> dis(compile("(10, 'abc')", '', 'eval'))
+      1           0 LOAD_CONST               2 ((10, 'abc'))
+                  3 RETURN_VALUE   
+ 
+    >>> dis(compile("[10, 'abc']", '', 'eval'))
+      1           0 LOAD_CONST               0 (10)
+                  3 LOAD_CONST               1 ('abc')
+                  6 BUILD_LIST               2
+                  9 RETURN_VALUE 
+
+--- Разбор ---
+
+Что такое "constant folding" (свёртка констант)?
+Это оптимизация компилятора: если выражение состоит только из констант,
+вычислить его результат ЗАРАНЕЕ (во время компиляции), а не при каждом запуске.
+
+Пример аналогии из Java:
+  // Java-компилятор тоже делает constant folding:
+  int x = 2 + 3;  // компилятор превращает в: int x = 5;
+  // В байткоде уже лежит 5, сложения не будет в runtime
+
+В Python то же самое, но для кортежей из констант:
+  (10, 'abc')  — вычисляется один раз при компиляции, в байткод идёт готовый объект
+  [10, 'abc']  — список строится заново при каждом выполнении строки кода
+
+---
+
+Что такое peephole optimizer и AST-optimizer?
+
+Python компилирует код в два этапа:
+  1. Исходный код → AST (Abstract Syntax Tree, дерево разбора)
+  2. AST → байткод (.pyc файлы)
+
+На каждом этапе есть свой оптимизатор:
+
+  AST-optimizer (Python 3.7+) — работает на уровне синтаксического дерева.
+    Видит структуру выражений и может упростить их ДО генерации байткода.
+
+  Peephole optimizer — работает на уровне готового байткода.
+    "Заглядывает" в короткие последовательности инструкций (peephole = "глазок в двери")
+    и заменяет неэффективные паттерны на более быстрые.
+
+В современном Python (3.8+) основную работу делает AST-optimizer.
+Peephole optimizer остался, но его роль уменьшилась.
+
+---
+
+Разбор байткода из примера:
+
+  dis(compile("(10, 'abc')", '', 'eval'))
+    LOAD_CONST  ((10, 'abc'))  — одна инструкция: загрузить готовый кортеж
+    RETURN_VALUE
+
+  dis(compile("[10, 'abc']", '', 'eval'))
+    LOAD_CONST  10             — загрузить 10
+    LOAD_CONST  'abc'          — загрузить 'abc'
+    BUILD_LIST  2              — создать список из 2 элементов (выделить память!)
+    RETURN_VALUE
+
+Кортеж: 1 инструкция (загрузка готового объекта из константного пула)
+Список:  4 инструкции (2 загрузки + выделение памяти + заполнение)
+
+Это значит: каждый раз когда интерпретатор встречает [10, 'abc'] в коде,
+он выделяет новую память и строит список с нуля.
+Кортеж (10, 'abc') уже "живёт" в байткоде как готовый объект.
+
+---
+
+Практический вывод:
+
+Если литерал из констант используется как временное значение (например, для проверки):
+  if x in (1, 2, 3):   # кортеж — constant folded, создаётся один раз
+  if x in [1, 2, 3]:   # список — создаётся заново при каждом if
+
+Для маленьких литералов разница незаметна.
+Для горячих путей кода (tight loops) — кортеж ощутимо быстрее.
+
+
+
+Tuples do not need to be copied
+
+Running tuple(some_tuple) returns immediately itself. Since tuples are immutable, they do not have to be copied:
+
+Copy
+>>> a = (10, 20, 30)
+>>> b = tuple(a)
+>>> a is b
+True
+In contrast, list(some_list) requires all the data to be copied to a new list:
+
+Copy
+>>> a = [10, 20, 30]
+>>> b = list(a)
+>>> a is b
+False
+--------------------
+В Python всё то же самое — b = a это копирование ссылки:
+
+a = (10, 20, 30)
+b = a           # b и a смотрят на ОДИН объект
+a is b          # True — одинаковый id()
+Теперь разница:
+
+# Кортеж
+a = (10, 20, 30)
+b = tuple(a)    # Python думает: "зачем копировать неизменяемый объект?"
+                # и возвращает тот же самый объект
+a is b          # True — тот же объект!
+# Список
+a = [10, 20, 30]
+b = list(a)     # список мутируемый — нельзя делиться, нужна копия
+a is b          # False — новый объект с новыми данными
+Смысл примера именно в этом: tuple(some_tuple) — бесплатная операция (O(1), просто возвращает себя), list(some_list) — копирование (O(n), выделяет память).
+
+Аналогия с Java для закрепления:
+
+Java:                           Python:
+String a = "hello";            a = "hello"
+String b = a;                  b = a
+// a == b → true (та же ссылка) # a is b → True
+new ArrayList<>(list)          list(some_list)
+// всегда новый объект          # всегда новый объект
+// Аналога tuple(some_tuple)    # tuple(some_tuple) → тот же объект
+// в Java нет — String не имеет // Это оптимизация CPython для
+// такого конструктора           // иммутабельных объектов
+Ключевая идея: иммутабельный объект можно безопасно шарить между любым количеством переменных — никто не может его изменить, значит копировать бессмысленно. CPython этим пользуется.
+
+
+--------------------
+Tuples do not over-allocate
+
+Since a tuple's size is fixed, it can be stored more compactly than lists which need to over-allocate to make append() operations efficient.
+
+This gives tuples a nice space advantage:
+
+Copy
+>>> import sys
+>>> sys.getsizeof(tuple(iter(range(10))))
+128
+>>> sys.getsizeof(list(iter(range(10))))
+200
+Here is the comment from Objects/listobject.c that explains what lists are doing:
+
+Copy
+/* This over-allocates proportional to the list size, making room
+ * for additional growth.  The over-allocation is mild, but is
+ * enough to give linear-time amortized behavior over a long
+ * sequence of appends() in the presence of a poorly-performing
+ * system realloc().
+ * The growth pattern is:  0, 4, 8, 16, 25, 35, 46, 58, 72, 88, ...
+ * Note: new_allocated won't overflow because the largest possible value
+ *       is PY_SSIZE_T_MAX * (9 / 8) + 6 which always fits in a size_t.
+ */
+
+--- Разбор ---
+
+Зачем вообще over-allocate?
+Список в Python мутируемый — к нему можно делать append().
+Если каждый append() выделять ровно +1 элемент в памяти, это было бы O(n²) операций
+суммарно для n appends (т.к. каждый раз realloc всего массива).
+
+Вместо этого CPython выделяет память с запасом — "пусть будет место на будущие appends".
+Это делает append() амортизированно O(1) — как ArrayList в Java.
+
+Паттерн роста из комментария в C-коде:
+  0 → 4 → 8 → 16 → 25 → 35 → 46 → 58 → 72 → 88 ...
+
+Это примерно +12.5% каждый раз (формула: new_size = old_size + old_size // 8 + 6).
+
+Аналогия с Java:
+  ArrayList в Java делает то же самое — при превышении capacity создаёт новый массив
+  размером capacity * 1.5. Python-список примерно похожим образом.
+
+Почему кортеж экономит память:
+  10 элементов — кортеж:  128 байт  (ровно под 10 указателей + заголовок)
+  10 элементов — список:  200 байт  (выделено место под ~16 элементов = с запасом)
+
+Кортеж знает что не будет расти — выделяет ровно сколько нужно.
+Список не знает — всегда держит буфер.
+
+Можно проверить самому:
+  import sys
+  lst = []
+  for i in range(12):
+      lst.append(i)
+      print(f"len={len(lst)}, size={sys.getsizeof(lst)} bytes")
+
+
+
+
+
+
+
+ 
+Tuples refer directly to their elements
+
+References to objects are incorporated directly in a tuple object. In contrast, lists have an extra layer of indirection to an external array of pointers.
+
+This gives tuples a small speed advantage for indexed lookups and unpacking:
+
+Copy
+$ python3.6 -m timeit -s 'a = (10, 20, 30)' 'a[1]'
+10000000 loops, best of 3: 0.0304 usec per loop
+$ python3.6 -m timeit -s 'a = [10, 20, 30]' 'a[1]'
+10000000 loops, best of 3: 0.0309 usec per loop
+
+$ python3.6 -m timeit -s 'a = (10, 20, 30)' 'x, y, z = a'
+10000000 loops, best of 3: 0.0249 usec per loop
+$ python3.6 -m timeit -s 'a = [10, 20, 30]' 'x, y, z = a'
+10000000 loops, best of 3: 0.0251 usec per loop
+Here is how the tuple (10, 20) is stored:
+
+Copy
+    typedef struct {
+        Py_ssize_t ob_refcnt;
+        struct _typeobject *ob_type;
+        Py_ssize_t ob_size;
+        PyObject *ob_item[2];     /* store a pointer to 10 and a pointer to 20 */
+    } PyTupleObject;
+Here is how the list [10, 20] is stored:
+
+Copy
+    PyObject arr[2];              /* store a pointer to 10 and a pointer to 20 */
+
+    typedef struct {
+        Py_ssize_t ob_refcnt;
+        struct _typeobject *ob_type;
+        Py_ssize_t ob_size;
+        PyObject **ob_item = arr; /* store a pointer to the two-pointer array */
+        Py_ssize_t allocated;
+    } PyListObject;
+Note that the tuple object incorporates the two data pointers directly while the list object has an additional layer of indirection to an external array holding the two data pointers.
