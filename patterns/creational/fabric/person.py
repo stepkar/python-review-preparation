@@ -1,12 +1,12 @@
 from abc import ABCMeta, abstractstaticmethod, abstractmethod
 from typing import Self
 
+## junior fabric
 
 class IPerson(metaclass=ABCMeta):
 
   @abstractmethod
-  def person_method():
-    '''interface method'''
+  def person_method(self):...
 
 class Student(IPerson):
 
